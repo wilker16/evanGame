@@ -56,8 +56,8 @@ func _init(p_game, p_index: int, tex_path: String, prefix: String, p_name: Strin
 
 	# Try to load per-pose sprites (e.g. "spiky_stand.png", "spiky_walk.png" …)
 	var char_id := p_name.to_lower()
-	for pname in ["stand", "walk", "punch", "crouch", "jump", "hurt"]:
-		var ppath := "res://art/" + char_id + "_" + pname + ".png"
+	for pname: String in ["stand", "walk", "punch", "crouch", "jump", "hurt"]:
+		var ppath: String = "res://art/" + char_id + "_" + pname + ".png"
 		if ResourceLoader.exists(ppath):
 			var ptex := load(ppath) as Texture2D
 			if ptex:
