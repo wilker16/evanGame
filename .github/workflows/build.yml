@@ -6,9 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
@@ -45,23 +43,17 @@ jobs:
           test -f build/web/index.html
           test -f build/web/index.wasm
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Upload build as downloadable artifact
+        uses: actions/upload-artifact@v4
         with:
+          name: web-build
           path: build/web
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Configure Pages
-        uses: actions/configure-pages@v4
+      - name: Publish to gh-pages branch
+        # Serving Pages from the gh-pages branch avoids the Pages-site
+        # creation API, which the workflow token isn't allowed to call.
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          enablement: true
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: build/web
+          force_orphan: true
