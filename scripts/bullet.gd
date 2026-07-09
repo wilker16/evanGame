@@ -1,6 +1,7 @@
 class_name Bullet
 extends Node2D
 ## A slow army projectile. Hits the first vulnerable monster it touches.
+## Ducking monsters present a smaller, lower hitbox.
 
 var game
 var vel := Vector2.ZERO
@@ -22,8 +23,16 @@ func _process(delta: float) -> void:
 	for m in game.monsters:
 		if not is_instance_valid(m) or not m.can_be_hit():
 			continue
-		var center: Vector2 = m.global_position + Vector2(0, -m.sprite_h * 0.5)
-		if global_position.distance_to(center) < m.sprite_w * 0.35 + 20.0:
+		var center: Vector2
+		var radius: float
+		if m.ducking:
+			# Ducking monster is squished — smaller, lower target.
+			center = m.global_position + Vector2(0, -m.sprite_h * 0.275)
+			radius = m.sprite_w * 0.28
+		else:
+			center = m.global_position + Vector2(0, -m.sprite_h * 0.5)
+			radius = m.sprite_w * 0.35 + 20.0
+		if global_position.distance_to(center) < radius:
 			m.take_damage(damage)
 			game.spawn_spark(global_position)
 			queue_free()

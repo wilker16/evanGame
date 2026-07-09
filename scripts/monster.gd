@@ -1,7 +1,7 @@
 class_name Monster
 extends CharacterBody2D
 ## A playable giant monster (one of Evan's drawings). Walks, jumps, punches,
-## gets dizzy when the army wears it down, then shakes it off and comes back.
+## ducks, gets dizzy when the army wears it down, then shakes it off and comes back.
 
 const SPEED := 330.0
 const JUMP_VELOCITY := -760.0
@@ -22,6 +22,8 @@ var facing := 1
 var punch_cd := 0.0
 var fall_speed := 0.0
 var wobble_t := 0.0
+var ducking := false
+var walk_t := 0.0
 var _bob_tween: Tween
 
 var sprite: Sprite2D
@@ -38,6 +40,7 @@ func _init(p_game, p_index: int, tex_path: String, prefix: String, p_name: Strin
 	actions = {
 		"left": prefix + "_left", "right": prefix + "_right",
 		"jump": prefix + "_jump", "punch": prefix + "_punch",
+		"duck": prefix + "_duck",
 	}
 	collision_layer = 2
 	collision_mask = 1
@@ -101,6 +104,24 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		return
 
+	# Duck while on floor and duck key held.
+	var want_duck := Input.is_action_pressed(actions["duck"]) and is_on_floor()
+	if want_duck != ducking:
+		ducking = want_duck
+		sprite.rotation = 0.0
+		if ducking:
+			sprite.scale = base_sprite_scale * Vector2(1.25, 0.55)
+			sprite.position = Vector2(0, -sprite_h * 0.275)
+		else:
+			sprite.scale = base_sprite_scale
+			sprite.position = Vector2(0, -sprite_h * 0.5)
+
+	if ducking:
+		velocity.x = move_toward(velocity.x, 0.0, SPEED * 0.5)
+		move_and_slide()
+		position.x = clampf(position.x, 50.0, 1230.0)
+		return
+
 	var dir := Input.get_axis(actions["left"], actions["right"])
 	if absf(dir) > 0.2:
 		velocity.x = dir * SPEED
@@ -110,6 +131,14 @@ func _physics_process(delta: float) -> void:
 			sprite.flip_h = facing < 0
 	else:
 		velocity.x = move_toward(velocity.x, 0.0, SPEED * 0.25)
+
+	# Walk lean — subtle body tilt while moving on the ground.
+	if is_on_floor() and absf(velocity.x) > 10.0:
+		walk_t += delta * 8.0
+		sprite.rotation = sin(walk_t) * 0.045 * facing
+	else:
+		walk_t = 0.0
+		sprite.rotation = move_toward(sprite.rotation, 0.0, delta * 8.0)
 
 	if Input.is_action_just_pressed(actions["jump"]) and is_on_floor():
 		velocity.y = JUMP_VELOCITY
@@ -126,7 +155,6 @@ func _physics_process(delta: float) -> void:
 	if was_airborne and is_on_floor():
 		_pose(Vector2(1.1, 0.88))
 		if fall_speed > STOMP_MIN_FALL_SPEED:
-			# Ground-pound: landing hard smashes whatever is underfoot.
 			var size := Vector2(sprite_w + 60.0, 90.0)
 			game.try_smash(self, Rect2(global_position - Vector2(size.x * 0.5, size.y - 20.0), size))
 		fall_speed = 0.0
@@ -175,6 +203,9 @@ func _wake() -> void:
 
 func _go_dizzy() -> void:
 	dizzy = true
+	ducking = false
+	sprite.scale = base_sprite_scale
+	sprite.position = Vector2(0, -sprite_h * 0.5)
 	Sfx.play("dizzy")
 	sprite.modulate = Color(0.75, 0.75, 0.9)
 	game.popup_score(global_position + Vector2(0, -sprite_h - 30.0), "DIZZY!", Color("#ffe27a"))
@@ -197,6 +228,8 @@ func _go_dizzy() -> void:
 
 ## Quick squash/stretch, returning to normal.
 func _pose(factor: Vector2) -> void:
+	if ducking:
+		return
 	sprite.scale = base_sprite_scale * factor
 	var tw := create_tween()
 	tw.tween_property(sprite, "scale", base_sprite_scale, 0.18) \

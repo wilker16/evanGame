@@ -1,5 +1,5 @@
 extends Node2D
-## One round of Monster Rampage: a fresh city, two monsters, an angry army.
+## One round of Monster Rampage: a fresh city, one or two monsters, an angry army.
 ## Built entirely in code so the whole game lives in readable scripts.
 
 signal restart_requested
@@ -18,17 +18,20 @@ const VEHICLE_POINTS := 50
 const MAX_TANKS := 2
 const MAX_HELIS := 2
 
-const PALETTE: Array = [
-	Color("#c96a5a"), Color("#8ea0b8"), Color("#d8b36a"),
-	Color("#7fb2a3"), Color("#b48ec9"), Color("#d88f6a"),
+# Building tier palettes: tier 0 = wood/glass (1 HP), 1 = brick (2 HP), 2 = concrete (3 HP).
+const TIER_PALETTES: Array = [
+	[Color("#d8b36a"), Color("#c8a354"), Color("#d89e4a")],
+	[Color("#c96a5a"), Color("#8ea0b8"), Color("#7fb2a3"), Color("#b48ec9"), Color("#d88f6a")],
+	[Color("#607080"), Color("#506070"), Color("#445a6a")],
 ]
-const P1_COLOR := Color("#e74c3c")
-const P2_COLOR := Color("#2465c8")
+
+var player_count := 1
+var char_configs: Array = []
 
 var monsters: Array = []
 var buildings: Array = []
 var enemies: Array = []
-var scores := {1: 0, 2: 0}
+var scores := {}
 var won := false
 var spawn_interval := 5.0
 
@@ -38,6 +41,12 @@ var hp_bars := {}
 var buildings_label: Label
 var spawn_timer: Timer
 var clouds: Array = []
+
+func _init(p_count: int = 1, p_configs: Array = []) -> void:
+	player_count = p_count
+	char_configs = p_configs
+	for i in p_count:
+		scores[i + 1] = 0
 
 func _ready() -> void:
 	randomize()
@@ -92,7 +101,6 @@ func _build_backdrop() -> void:
 		add_child(cloud)
 		clouds.append({"node": cloud, "speed": 12.0 + i * 6.0})
 
-	# Distant skyline silhouettes.
 	var sx := 20.0
 	while sx < VIEW_W - 40.0:
 		var w := randf_range(60.0, 120.0)
@@ -133,26 +141,34 @@ func _build_ground() -> void:
 	add_child(floor_body)
 
 func _build_city() -> void:
+	# Mix of 3 weak (tier 0), 2 medium (tier 1), 1 tough (tier 2) buildings.
+	var tier_list := [0, 0, 1, 1, 2, 0]
+	tier_list.shuffle()
 	var x := 90.0
 	for i in 6:
+		var t: int = tier_list[i]
 		var cols := randi_range(2, 3)
-		var rows := randi_range(3, 6)
-		var b = BuildingScript.new(self, cols, rows, PALETTE[i % PALETTE.size()])
+		var rows := randi_range(3 + t, 5 + t)  # tougher buildings are taller
+		var palette: Array = TIER_PALETTES[t]
+		var color: Color = palette[i % palette.size()]
+		var b = BuildingScript.new(self, cols, rows, color, t)
 		b.position = Vector2(x, GROUND_Y)
 		add_child(b)
 		buildings.append(b)
 		x += cols * BuildingScript.CHUNK_W + randf_range(28.0, 60.0)
 
 func _spawn_monsters() -> void:
-	var m1 = MonsterScript.new(self, 1, "res://art/monster_spiky.png", "p1", "SPIKY", 255.0)
-	m1.position = Vector2(240, GROUND_Y - 2.0)
-	add_child(m1)
-	var m2 = MonsterScript.new(self, 2, "res://art/monster_penguin.png", "p2", "PENGUIN", 255.0)
-	m2.position = Vector2(1040, GROUND_Y - 2.0)
-	m2.facing = -1
-	m2.sprite.flip_h = true
-	add_child(m2)
-	monsters = [m1, m2]
+	var start_x := [240.0, 1040.0]
+	for i in char_configs.size():
+		var cfg: Dictionary = char_configs[i]
+		var prefix := "p%d" % (i + 1)
+		var m = MonsterScript.new(self, i + 1, cfg["art"], prefix, cfg["name"], cfg["height"])
+		m.position = Vector2(start_x[i], GROUND_Y - 2.0)
+		if i == 1:
+			m.facing = -1
+			m.sprite.flip_h = true
+		add_child(m)
+		monsters.append(m)
 
 # --- HUD ---------------------------------------------------------------------
 
@@ -160,8 +176,10 @@ func _build_hud() -> void:
 	hud = CanvasLayer.new()
 	hud.layer = 5
 	add_child(hud)
-	_build_player_panel(1, Vector2(16, 10), "SPIKY", P1_COLOR)
-	_build_player_panel(2, Vector2(VIEW_W - 246.0, 10), "PENGUIN", P2_COLOR)
+	for i in char_configs.size():
+		var cfg: Dictionary = char_configs[i]
+		var panel_x := 16.0 if i == 0 else VIEW_W - 246.0
+		_build_player_panel(i + 1, Vector2(panel_x, 10), cfg["name"], cfg["color"])
 
 	buildings_label = Label.new()
 	buildings_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -398,17 +416,26 @@ func _win() -> void:
 	dim.size = Vector2(VIEW_W, 720)
 	overlay.add_child(dim)
 
-	_overlay_label(overlay, "CITY SMASHED!", 72, Color("#ffe27a"), 170.0)
-	var p1: int = scores[1]
-	var p2: int = scores[2]
-	_overlay_label(overlay, "SPIKY: %d" % p1, 40, P1_COLOR.lightened(0.3), 300.0)
-	_overlay_label(overlay, "PENGUIN: %d" % p2, 40, P2_COLOR.lightened(0.4), 360.0)
-	var verdict := "IT'S A TIE! YOU BOTH WIN!"
-	if p1 > p2:
-		verdict = "SPIKY IS THE KING OF THE CITY!"
-	elif p2 > p1:
-		verdict = "PENGUIN IS THE KING OF THE CITY!"
-	_overlay_label(overlay, verdict, 34, Color.WHITE, 440.0)
+	_overlay_label(overlay, "CITY SMASHED!", 72, Color("#ffe27a"), 160.0)
+
+	if player_count == 1:
+		var cfg: Dictionary = char_configs[0]
+		_overlay_label(overlay, "%s: %d" % [cfg["name"], scores[1]], 50, cfg["color"].lightened(0.3), 295.0)
+		_overlay_label(overlay, "YOU SMASHED THE CITY!", 36, Color.WHITE, 385.0)
+	else:
+		var p1: int = scores[1]
+		var p2: int = scores[2]
+		_overlay_label(overlay, "%s: %d" % [char_configs[0]["name"], p1], 40,
+			char_configs[0]["color"].lightened(0.3), 280.0)
+		_overlay_label(overlay, "%s: %d" % [char_configs[1]["name"], p2], 40,
+			char_configs[1]["color"].lightened(0.3), 340.0)
+		var verdict := "IT'S A TIE! YOU BOTH WIN!"
+		if p1 > p2:
+			verdict = "%s IS THE KING OF THE CITY!" % char_configs[0]["name"]
+		elif p2 > p1:
+			verdict = "%s IS THE KING OF THE CITY!" % char_configs[1]["name"]
+		_overlay_label(overlay, verdict, 34, Color.WHITE, 420.0)
+
 	var again := _overlay_label(overlay, "PRESS ENTER FOR A NEW CITY", 28, Color.WHITE, 540.0)
 	var blink := again.create_tween().set_loops()
 	blink.tween_property(again, "modulate:a", 0.2, 0.5)
