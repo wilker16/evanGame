@@ -410,7 +410,7 @@ func _win() -> void:
 		verdict = "PENGUIN IS THE KING OF THE CITY!"
 	_overlay_label(overlay, verdict, 34, Color.WHITE, 440.0)
 	var again := _overlay_label(overlay, "PRESS ENTER FOR A NEW CITY", 28, Color.WHITE, 540.0)
-	var blink := create_tween().set_loops()
+	var blink := again.create_tween().set_loops()
 	blink.tween_property(again, "modulate:a", 0.2, 0.5)
 	blink.tween_property(again, "modulate:a", 1.0, 0.5)
 

@@ -22,6 +22,7 @@ var facing := 1
 var punch_cd := 0.0
 var fall_speed := 0.0
 var wobble_t := 0.0
+var _bob_tween: Tween
 
 var sprite: Sprite2D
 var base_sprite_scale := Vector2.ONE
@@ -73,10 +74,10 @@ func _init(p_game, p_index: int, tex_path: String, prefix: String, p_name: Strin
 
 func _ready() -> void:
 	if is_instance_valid(wake_label):
-		var tw := create_tween().set_loops()
-		tw.tween_property(wake_label, "position:y", wake_label.position.y - 10.0, 0.5) \
+		_bob_tween = create_tween().set_loops()
+		_bob_tween.tween_property(wake_label, "position:y", wake_label.position.y - 10.0, 0.5) \
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-		tw.tween_property(wake_label, "position:y", wake_label.position.y, 0.5) \
+		_bob_tween.tween_property(wake_label, "position:y", wake_label.position.y, 0.5) \
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 func _physics_process(delta: float) -> void:
@@ -162,6 +163,8 @@ func can_be_targeted() -> bool:
 func _wake() -> void:
 	awake = true
 	sprite.modulate = Color.WHITE
+	if _bob_tween:
+		_bob_tween.kill()
 	if is_instance_valid(wake_label):
 		wake_label.queue_free()
 	Sfx.play("roar")

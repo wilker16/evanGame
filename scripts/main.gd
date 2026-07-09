@@ -7,13 +7,31 @@ var title: CanvasLayer
 var game: Node2D
 var title_active := false
 
+# Title-screen animation state (driven by _process to avoid Tween web-build issues).
+var _title_t := 0.0
+var _spiky_sprite: Sprite2D
+var _penguin_sprite: Sprite2D
+var _press_label: Label
+var _spiky_base_y := 0.0
+var _penguin_base_y := 0.0
+var _press_base_a := 1.0
+
 func _ready() -> void:
 	_setup_inputs()
 	_show_title()
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if title_active and Input.is_action_just_pressed("ui_accept"):
 		start_game()
+	# Animate title sprites and blink label without Tweens.
+	if title_active:
+		_title_t += delta
+		if is_instance_valid(_spiky_sprite):
+			_spiky_sprite.position.y = _spiky_base_y + sin(_title_t * 2.86) * 7.0
+		if is_instance_valid(_penguin_sprite):
+			_penguin_sprite.position.y = _penguin_base_y + sin(_title_t * 2.86 + PI) * 7.0
+		if is_instance_valid(_press_label):
+			_press_label.modulate.a = 0.575 + 0.425 * sin(_title_t * 5.71)
 
 func _setup_inputs() -> void:
 	var keys := {
@@ -65,34 +83,26 @@ func _show_title() -> void:
 	_title_label("EVAN'S MONSTER RAMPAGE", 62, Color.WHITE, Vector2(0, 40), Color("#2b3a55"))
 	_title_label("SMASH THE WHOLE CITY!", 30, Color("#ffe27a"), Vector2(0, 128), Color("#2b3a55"))
 
-	var spiky := Sprite2D.new()
-	spiky.texture = load("res://art/monster_spiky.png")
-	spiky.scale = Vector2.ONE * (300.0 / spiky.texture.get_height())
-	spiky.position = Vector2(320, 400)
-	title.add_child(spiky)
+	_spiky_sprite = Sprite2D.new()
+	_spiky_sprite.texture = load("res://art/monster_spiky.png")
+	_spiky_sprite.scale = Vector2.ONE * (300.0 / _spiky_sprite.texture.get_height())
+	_spiky_sprite.position = Vector2(320, 400)
+	_spiky_base_y = _spiky_sprite.position.y
+	title.add_child(_spiky_sprite)
 
-	var penguin := Sprite2D.new()
-	penguin.texture = load("res://art/monster_penguin.png")
-	penguin.scale = Vector2.ONE * (320.0 / penguin.texture.get_height())
-	penguin.position = Vector2(960, 400)
-	title.add_child(penguin)
-
-	for s in [spiky, penguin]:
-		var tw := create_tween().set_loops()
-		tw.tween_property(s, "position:y", s.position.y - 14.0, 1.1) \
-			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-		tw.tween_property(s, "position:y", s.position.y, 1.1) \
-			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_penguin_sprite = Sprite2D.new()
+	_penguin_sprite.texture = load("res://art/monster_penguin.png")
+	_penguin_sprite.scale = Vector2.ONE * (320.0 / _penguin_sprite.texture.get_height())
+	_penguin_sprite.position = Vector2(960, 400)
+	_penguin_base_y = _penguin_sprite.position.y
+	title.add_child(_penguin_sprite)
 
 	_title_label("PLAYER 1: SPIKY", 24, Color("#e74c3c"), Vector2(-320, 540), Color.WHITE)
 	_title_label("A / D move   W jump   F punch", 20, Color("#2b3a55"), Vector2(-320, 574))
 	_title_label("PLAYER 2: PENGUIN", 24, Color("#2465c8"), Vector2(320, 540), Color.WHITE)
 	_title_label("ARROWS move + jump   L punch", 20, Color("#2b3a55"), Vector2(320, 574))
 
-	var press := _title_label("PRESS ENTER TO START", 32, Color.WHITE, Vector2(0, 630), Color("#2b3a55"))
-	var blink := create_tween().set_loops()
-	blink.tween_property(press, "modulate:a", 0.15, 0.55)
-	blink.tween_property(press, "modulate:a", 1.0, 0.55)
+	_press_label = _title_label("PRESS ENTER TO START", 32, Color.WHITE, Vector2(0, 630), Color("#2b3a55"))
 
 	_title_label("All monsters drawn by Evan", 18, Color("#4a5a75"), Vector2(0, 688))
 	title_active = true
