@@ -1,0 +1,12 @@
+# Godot
+.godot/
+*.translation
+
+# Build output
+build/
+
+# Logs
+*.log
+
+# Python
+__pycache__/

@@ -1,0 +1,60 @@
+name: Build & Deploy Web
+
+on:
+  push:
+    branches: [claude/godot-monster-rampage-hsan0i, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import assets
+        run: godot --headless --import 2>&1 | tee import.log || true
+
+      - name: Script smoke check
+        run: |
+          godot --headless -s res://tools/ci_check.gd 2>&1 | tee check.log
+          grep -q "CI_SMOKE_OK" check.log
+          ! grep -E "SCRIPT ERROR|Parse Error" check.log
+
+      - name: Export web build
+        run: |
+          mkdir -p build/web
+          godot --headless --export-release "Web" build/web/index.html 2>&1 | tee export.log
+          test -f build/web/index.html
+          test -f build/web/index.wasm
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v4
+        with:
+          enablement: true
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
