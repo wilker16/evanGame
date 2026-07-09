@@ -31,6 +31,13 @@ jobs:
           grep -q "CI_SMOKE_OK" check.log
           ! grep -E "SCRIPT ERROR|Parse Error" check.log
 
+      - name: Provide export templates
+        # GitHub Actions overrides HOME to /github/home inside containers;
+        # the godot-ci image ships the templates under /root.
+        run: |
+          mkdir -p "$HOME/.local/share/godot/export_templates"
+          cp -r /root/.local/share/godot/export_templates/4.3.stable "$HOME/.local/share/godot/export_templates/"
+
       - name: Export web build
         run: |
           mkdir -p build/web
