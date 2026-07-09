@@ -25,6 +25,7 @@ var wobble_t := 0.0
 var ducking := false
 var walk_t := 0.0
 var _bob_tween: Tween
+var _punch_arm: Node2D
 
 var sprite: Sprite2D
 var base_sprite_scale := Vector2.ONE
@@ -161,14 +162,105 @@ func _physics_process(delta: float) -> void:
 
 func _punch() -> void:
 	punch_cd = PUNCH_COOLDOWN
+	# Sprite body lurches forward.
 	var base := Vector2(0, -sprite_h * 0.5)
 	var tw := create_tween()
-	tw.tween_property(sprite, "position", base + Vector2(facing * 26.0, 0), 0.07) \
+	tw.tween_property(sprite, "position", base + Vector2(facing * 30.0, 0), 0.07) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tw.tween_property(sprite, "position", base, 0.12)
+	tw.tween_property(sprite, "position", base, 0.14)
+	# Extending arm sprite and impact burst.
+	_spawn_punch_arm()
+	# Hitbox.
 	var center := global_position + Vector2(facing * (sprite_w * 0.5 + 50.0), -sprite_h * 0.55)
 	var size := Vector2(170.0, 210.0)
 	game.try_smash(self, Rect2(center - size * 0.5, size))
+	game.popup_score(center + Vector2(0, -20), "POW!", Color("#ffe27a"))
+
+func _spawn_punch_arm() -> void:
+	if is_instance_valid(_punch_arm):
+		_punch_arm.queue_free()
+	_punch_arm = Node2D.new()
+	_punch_arm.position = Vector2(0, -sprite_h * 0.55)
+	_punch_arm.z_index = 11
+	add_child(_punch_arm)
+
+	var arm_len := sprite_w * 0.65
+	var shoulder_x := sprite_w * 0.28
+
+	# Arm — trapezoid that widens slightly toward the fist.
+	var arm := Polygon2D.new()
+	arm.polygon = PackedVector2Array([
+		Vector2(shoulder_x,           -11.0),
+		Vector2(shoulder_x + arm_len, -15.0),
+		Vector2(shoulder_x + arm_len,  15.0),
+		Vector2(shoulder_x,            11.0),
+	])
+	arm.color = Color("#f0a030")
+	_punch_arm.add_child(arm)
+
+	# Fist — chunky hexagon at the end of the arm.
+	var fx := shoulder_x + arm_len
+	var fs := 34.0
+	var fist := Polygon2D.new()
+	fist.polygon = PackedVector2Array([
+		Vector2(fx,          -fs * 0.55),
+		Vector2(fx + fs,     -fs * 0.50),
+		Vector2(fx + fs * 1.2, 0.0),
+		Vector2(fx + fs,      fs * 0.50),
+		Vector2(fx,           fs * 0.55),
+		Vector2(fx - 6.0,     0.0),
+	])
+	fist.color = Color("#e06818")
+	_punch_arm.add_child(fist)
+
+	# Three knuckle ridges on the fist face.
+	for k in 3:
+		var kn := Polygon2D.new()
+		var kx := fx + 8.0 + k * 9.0
+		kn.polygon = PackedVector2Array([
+			Vector2(kx,       -fs * 0.38),
+			Vector2(kx + 4.0, -fs * 0.38),
+			Vector2(kx + 4.0,  fs * 0.38),
+			Vector2(kx,        fs * 0.38),
+		])
+		kn.color = Color("#bf5010")
+		_punch_arm.add_child(kn)
+
+	# Impact star burst at the fist tip — spawned before scale animation.
+	var tip := global_position + Vector2(facing * (shoulder_x + arm_len + fs * 1.1), -sprite_h * 0.55)
+	_spawn_impact_star(tip)
+
+	# Arm extends from near-zero scale to full then retracts.
+	_punch_arm.scale = Vector2(facing * 0.05, 1.0)
+	var anim := _punch_arm.create_tween()
+	anim.tween_property(_punch_arm, "scale", Vector2(facing * 1.0, 1.0), 0.08) \
+		.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	anim.tween_interval(0.08)
+	anim.tween_property(_punch_arm, "scale", Vector2(facing * 0.05, 1.0), 0.12) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	anim.tween_callback(_punch_arm.queue_free)
+
+func _spawn_impact_star(pos: Vector2) -> void:
+	var star := Polygon2D.new()
+	star.polygon = _star_points(26.0, 7)
+	star.position = pos
+	star.color = Color("#ffe040")
+	star.z_index = 20
+	add_child(star)
+	var tw := star.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(star, "scale", Vector2(3.0, 3.0), 0.22) \
+		.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	tw.tween_property(star, "modulate", Color(1.0, 0.8, 0.0, 0.0), 0.25)
+	tw.chain().tween_callback(star.queue_free)
+
+func _star_points(r: float, n: int) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i in n * 2:
+		var a := TAU * i / (n * 2) - PI * 0.5
+		var rad := r if i % 2 == 0 else r * 0.38
+		pts.append(Vector2(cos(a) * rad, sin(a) * rad))
+	return pts
 
 func take_damage(dmg: float) -> void:
 	if not can_be_hit():
@@ -204,6 +296,8 @@ func _wake() -> void:
 func _go_dizzy() -> void:
 	dizzy = true
 	ducking = false
+	if is_instance_valid(_punch_arm):
+		_punch_arm.queue_free()
 	sprite.scale = base_sprite_scale
 	sprite.position = Vector2(0, -sprite_h * 0.5)
 	Sfx.play("dizzy")

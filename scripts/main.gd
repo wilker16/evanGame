@@ -89,7 +89,10 @@ func _proc_count() -> void:
 func _proc_char() -> void:
 	var prefix := "p1" if _char_picking == 1 else "p2"
 	var cur    := _p1_char if _char_picking == 1 else _p2_char
-	var other  := _p2_char if _char_picking == 1 else _p1_char
+	# In 1P mode nothing is blocked; in 2P block the other player's pick.
+	var other := -1
+	if _player_count == 2:
+		other = _p2_char if _char_picking == 1 else _p1_char
 
 	if Input.is_action_just_pressed(prefix + "_left"):
 		cur = _prev_char(cur, other)
@@ -205,6 +208,8 @@ func _go_count() -> void:
 	_refresh_count()
 	_menu_label("A / D or ←/→ to choose   F or ENTER to confirm",
 		22, Color(0.7, 0.8, 1.0), Vector2(0, 450), _count_layer)
+	_menu_label("(in 1 PLAYER mode, WASD and ARROW KEYS both work)",
+		18, Color(0.55, 0.65, 0.85), Vector2(0, 500), _count_layer)
 
 func _refresh_count() -> void:
 	for i in _count_opts.size():
@@ -330,6 +335,8 @@ func _launch_game() -> void:
 	if is_instance_valid(title):
 		title.visible = false
 
+	_configure_p1_keys()
+
 	var chosen: Array = [CHARACTERS[_p1_char]]
 	if _player_count == 2:
 		chosen.append(CHARACTERS[_p2_char])
@@ -341,6 +348,7 @@ func _launch_game() -> void:
 func _on_restart() -> void:
 	if is_instance_valid(game):
 		game.queue_free()
+	_configure_p1_keys()
 	var chosen: Array = [CHARACTERS[_p1_char]]
 	if _player_count == 2:
 		chosen.append(CHARACTERS[_p2_char])
@@ -348,6 +356,22 @@ func _on_restart() -> void:
 	game.restart_requested.connect(_on_restart)
 	add_child(game)
 	screen = Screen.GAME
+
+## In 1P mode P1 may use WASD or Arrow keys interchangeably.
+## In 2P mode P1 is strictly WASD so the arrow keys belong to P2.
+func _configure_p1_keys() -> void:
+	var actions := ["p1_left", "p1_right", "p1_jump", "p1_punch", "p1_duck"]
+	var base    := [KEY_A,    KEY_D,     KEY_W,    KEY_F,     KEY_S   ]
+	var extra   := [KEY_LEFT, KEY_RIGHT, KEY_UP,   KEY_L,     KEY_DOWN]
+	for i in actions.size():
+		InputMap.action_erase_events(actions[i])
+		var ev := InputEventKey.new()
+		ev.physical_keycode = base[i]
+		InputMap.action_add_event(actions[i], ev)
+		if _player_count == 1:
+			var ev2 := InputEventKey.new()
+			ev2.physical_keycode = extra[i]
+			InputMap.action_add_event(actions[i], ev2)
 
 # ---- helpers ---------------------------------------------------------------
 
