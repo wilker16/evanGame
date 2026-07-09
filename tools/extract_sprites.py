@@ -80,8 +80,25 @@ def extract_spiky() -> None:
 
     # Darken strokes a touch so faint pencil reads on screen.
     stroke = np.clip(rgb * 0.55, 0, 255).astype(np.uint8)
+
+    # "Color him in": seal small stroke gaps, find the enclosed inside of the
+    # figure, and fill it like a green marker (keeping the pencil lines dark).
+    solid = alpha > 60
+    closed = ndimage.binary_closing(solid, structure=np.ones((29, 29)))
+    filled = ndimage.binary_fill_holes(closed)
+    interior = filled & ~solid
+    fill_color = np.array([111, 191, 74], dtype=np.float32)  # monster green
+    for c in range(3):
+        ch = stroke[:, :, c].astype(np.float32)
+        ch[interior] = fill_color[c] * 0.92 + rgb[:, :, c][interior] * 0.08
+        stroke[:, :, c] = np.clip(ch, 0, 255).astype(np.uint8)
+    alpha = np.where(interior, 245, alpha).astype(np.uint8)
+
     rgba = np.dstack([stroke, alpha])
-    rgba = shrink(crop_to_content(rgba))
+    rgba = crop_to_content(rgba)
+    # The photo has him lying sideways (head to the left) - stand him up.
+    rgba = np.rot90(rgba, k=-1).copy()
+    rgba = shrink(rgba)
     Image.fromarray(rgba).save(f"{ROOT}/art/monster_spiky.png")
     checker_preview(rgba, f"{ROOT}/art/originals/preview_spiky.png")
     print("spiky:", rgba.shape)
@@ -112,7 +129,13 @@ def extract_penguin() -> None:
     alpha = (np.clip(alpha, 0, 1) * 255).astype(np.uint8)
     alpha = despeckle(alpha, min_px=4000)
 
-    stroke = np.clip(rgb * 0.8, 0, 255).astype(np.uint8)
+    # Punch up the colours so he pops on screen: more saturation + contrast,
+    # and make the body fully opaque.
+    mean = rgb.mean(axis=2, keepdims=True)
+    vivid = np.clip(mean + (rgb - mean) * 1.9, 0, 255)
+    vivid = np.clip((vivid - 128.0) * 1.18 + 118.0, 0, 255)
+    stroke = vivid.astype(np.uint8)
+    alpha = np.where(alpha > 150, 255, alpha).astype(np.uint8)
     rgba = np.dstack([stroke, alpha])
     rgba = shrink(crop_to_content(rgba))
     Image.fromarray(rgba).save(f"{ROOT}/art/monster_penguin.png")

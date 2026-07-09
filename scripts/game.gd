@@ -144,7 +144,7 @@ func _build_city() -> void:
 		x += cols * BuildingScript.CHUNK_W + randf_range(28.0, 60.0)
 
 func _spawn_monsters() -> void:
-	var m1 = MonsterScript.new(self, 1, "res://art/monster_spiky.png", "p1", "SPIKY", 230.0)
+	var m1 = MonsterScript.new(self, 1, "res://art/monster_spiky.png", "p1", "SPIKY", 255.0)
 	m1.position = Vector2(240, GROUND_Y - 2.0)
 	add_child(m1)
 	var m2 = MonsterScript.new(self, 2, "res://art/monster_penguin.png", "p2", "PENGUIN", 255.0)
