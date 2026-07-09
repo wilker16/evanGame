@@ -2,6 +2,7 @@ class_name Monster
 extends CharacterBody2D
 ## A playable giant monster (one of Evan's drawings). Walks, jumps, punches,
 ## ducks, gets dizzy when the army wears it down, then shakes it off and comes back.
+## Swaps sprite textures based on current pose when pose PNGs are present.
 
 const SPEED := 330.0
 const JUMP_VELOCITY := -760.0
@@ -26,6 +27,12 @@ var ducking := false
 var walk_t := 0.0
 var _bob_tween: Tween
 var _punch_arm: Node2D
+var _hurt_t := 0.0          # countdown showing the hurt sprite after taking damage
+
+# Pose sprite system — populated in _init if per-pose PNGs exist.
+var pose_textures := {}     # String -> Texture2D
+var pose_scales := {}       # String -> Vector2 (natural scale that fills sprite_h)
+var _current_pose := "stand"
 
 var sprite: Sprite2D
 var base_sprite_scale := Vector2.ONE
@@ -47,11 +54,23 @@ func _init(p_game, p_index: int, tex_path: String, prefix: String, p_name: Strin
 	collision_mask = 1
 	z_index = 10
 
-	var tex: Texture2D = load(tex_path)
-	var s := sprite_h / float(tex.get_height())
-	sprite_w = tex.get_width() * s
+	# Try to load per-pose sprites (e.g. "spiky_stand.png", "spiky_walk.png" …)
+	var char_id := p_name.to_lower()
+	for pname in ["stand", "walk", "punch", "crouch", "jump", "hurt"]:
+		var ppath := "res://art/" + char_id + "_" + pname + ".png"
+		if ResourceLoader.exists(ppath):
+			var ptex := load(ppath) as Texture2D
+			if ptex:
+				pose_textures[pname] = ptex
+				var ps := sprite_h / float(ptex.get_height())
+				pose_scales[pname] = Vector2(ps, ps)
+
+	# Primary sprite: prefer the extracted stand pose; fall back to tex_path.
+	var main_tex: Texture2D = pose_textures.get("stand", load(tex_path) as Texture2D)
+	var s := sprite_h / float(main_tex.get_height())
+	sprite_w = main_tex.get_width() * s
 	sprite = Sprite2D.new()
-	sprite.texture = tex
+	sprite.texture = main_tex
 	sprite.scale = Vector2(s, s)
 	base_sprite_scale = sprite.scale
 	sprite.position = Vector2(0, -sprite_h * 0.5)
@@ -86,6 +105,8 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	punch_cd = maxf(punch_cd - delta, 0.0)
+	_hurt_t  = maxf(_hurt_t  - delta, 0.0)
+
 	if not is_on_floor():
 		velocity.y += GRAVITY * delta
 		fall_speed = velocity.y
@@ -95,6 +116,7 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		wobble_t += delta
 		sprite.rotation = sin(wobble_t * 9.0) * 0.22
+		_apply_pose("hurt")
 		return
 
 	if not awake:
@@ -111,7 +133,9 @@ func _physics_process(delta: float) -> void:
 		ducking = want_duck
 		sprite.rotation = 0.0
 		if ducking:
-			sprite.scale = base_sprite_scale * Vector2(1.25, 0.55)
+			# If we have a drawn crouch sprite use it; otherwise squash the existing one.
+			if not pose_textures.has("crouch"):
+				sprite.scale = base_sprite_scale * Vector2(1.25, 0.55)
 			sprite.position = Vector2(0, -sprite_h * 0.275)
 		else:
 			sprite.scale = base_sprite_scale
@@ -121,6 +145,7 @@ func _physics_process(delta: float) -> void:
 		velocity.x = move_toward(velocity.x, 0.0, SPEED * 0.5)
 		move_and_slide()
 		position.x = clampf(position.x, 50.0, 1230.0)
+		_apply_pose("crouch")
 		return
 
 	var dir := Input.get_axis(actions["left"], actions["right"])
@@ -160,6 +185,34 @@ func _physics_process(delta: float) -> void:
 			game.try_smash(self, Rect2(global_position - Vector2(size.x * 0.5, size.y - 20.0), size))
 		fall_speed = 0.0
 
+	# Pick pose sprite for current state.
+	_apply_pose(_choose_pose())
+
+# ── Pose texture management ──────────────────────────────────────────────────
+
+func _choose_pose() -> String:
+	if _hurt_t > 0.0:
+		return "hurt"
+	if not is_on_floor():
+		return "jump"
+	if punch_cd > PUNCH_COOLDOWN * 0.45:
+		return "punch"
+	if absf(velocity.x) > 10.0:
+		return "walk"
+	return "stand"
+
+func _apply_pose(p: String) -> void:
+	if not pose_textures.has(p) or _current_pose == p:
+		return
+	_current_pose = p
+	sprite.texture = pose_textures[p]
+	base_sprite_scale = pose_scales[p]
+	if not ducking:
+		sprite.scale = base_sprite_scale
+		sprite.position = Vector2(0, -sprite_h * 0.5)
+
+# ── Actions ──────────────────────────────────────────────────────────────────
+
 func _punch() -> void:
 	punch_cd = PUNCH_COOLDOWN
 	# Sprite body lurches forward.
@@ -168,10 +221,13 @@ func _punch() -> void:
 	tw.tween_property(sprite, "position", base + Vector2(facing * 30.0, 0), 0.07) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tw.tween_property(sprite, "position", base, 0.14)
-	# Extending arm sprite and impact burst.
-	_spawn_punch_arm()
-	# Hitbox.
+	# Use procedural arm only when no drawn punch sprite exists.
 	var center := global_position + Vector2(facing * (sprite_w * 0.5 + 50.0), -sprite_h * 0.55)
+	if pose_textures.has("punch"):
+		_spawn_impact_star(center + Vector2(facing * 80.0, 0))
+	else:
+		_spawn_punch_arm()
+	# Hitbox.
 	var size := Vector2(170.0, 210.0)
 	game.try_smash(self, Rect2(center - size * 0.5, size))
 	game.popup_score(center + Vector2(0, -20), "POW!", Color("#ffe27a"))
@@ -226,7 +282,7 @@ func _spawn_punch_arm() -> void:
 		kn.color = Color("#bf5010")
 		_punch_arm.add_child(kn)
 
-	# Impact star burst at the fist tip — spawned before scale animation.
+	# Impact star burst at the fist tip.
 	var tip := global_position + Vector2(facing * (shoulder_x + arm_len + fs * 1.1), -sprite_h * 0.55)
 	_spawn_impact_star(tip)
 
@@ -266,6 +322,7 @@ func take_damage(dmg: float) -> void:
 	if not can_be_hit():
 		return
 	hp = maxf(hp - dmg, 0.0)
+	_hurt_t = 0.45   # show hurt sprite for this long
 	Sfx.play("hurt", -6.0)
 	sprite.modulate = Color(1, 0.35, 0.35)
 	var tw := create_tween()
@@ -296,6 +353,7 @@ func _wake() -> void:
 func _go_dizzy() -> void:
 	dizzy = true
 	ducking = false
+	_current_pose = ""  # force pose refresh after recovery
 	if is_instance_valid(_punch_arm):
 		_punch_arm.queue_free()
 	sprite.scale = base_sprite_scale

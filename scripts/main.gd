@@ -11,15 +11,21 @@ const GameScript := preload("res://scripts/game.gd")
 const CHARACTERS: Array = [
 	{
 		"name": "SPIKY",
-		"art":  "res://art/monster_spiky.png",
+		"art":  "res://art/spiky_stand.png",
 		"height": 255.0,
 		"color": Color("#e74c3c"),
 	},
 	{
 		"name": "PENGUIN",
-		"art":  "res://art/monster_penguin.png",
+		"art":  "res://art/penguin_stand.png",
 		"height": 240.0,
 		"color": Color("#2465c8"),
+	},
+	{
+		"name": "ROBOT",
+		"art":  "res://art/robot_stand.png",
+		"height": 245.0,
+		"color": Color("#e8c020"),
 	},
 ]
 
@@ -152,24 +158,23 @@ func _show_title() -> void:
 	_title_label("EVAN'S MONSTER RAMPAGE", 62, Color.WHITE, Vector2(0, 40),  Color("#2b3a55"))
 	_title_label("SMASH THE WHOLE CITY!",  30, Color("#ffe27a"), Vector2(0, 128), Color("#2b3a55"))
 
-	_spiky_sprite = Sprite2D.new()
-	_spiky_sprite.texture = load("res://art/monster_spiky.png")
-	_spiky_sprite.scale = Vector2.ONE * (300.0 / _spiky_sprite.texture.get_height())
-	_spiky_sprite.position = Vector2(320, 400)
-	_spiky_base_y = _spiky_sprite.position.y
-	title.add_child(_spiky_sprite)
+	# Show up to 3 monsters on the title screen, evenly spaced.
+	var nc := mini(CHARACTERS.size(), 3)
+	for i in nc:
+		var cfg: Dictionary = CHARACTERS[i]
+		var tx := 1280.0 * (i + 1) / (nc + 1)
+		var spr := Sprite2D.new()
+		spr.texture = load(cfg["art"])
+		spr.scale = Vector2.ONE * (300.0 / spr.texture.get_height())
+		spr.position = Vector2(tx, 400)
+		if i == 0:
+			_spiky_sprite = spr; _spiky_base_y = spr.position.y
+		elif i == 1:
+			_penguin_sprite = spr; _penguin_base_y = spr.position.y
+		title.add_child(spr)
 
-	_penguin_sprite = Sprite2D.new()
-	_penguin_sprite.texture = load("res://art/monster_penguin.png")
-	_penguin_sprite.scale = Vector2.ONE * (320.0 / _penguin_sprite.texture.get_height())
-	_penguin_sprite.position = Vector2(960, 400)
-	_penguin_base_y = _penguin_sprite.position.y
-	title.add_child(_penguin_sprite)
-
-	_title_label("PLAYER 1: SPIKY",              24, Color("#e74c3c"), Vector2(-320, 540), Color.WHITE)
-	_title_label("A / D move   W jump   F punch   S duck", 18, Color("#2b3a55"), Vector2(-320, 574))
-	_title_label("PLAYER 2: PENGUIN",             24, Color("#2465c8"), Vector2(320, 540), Color.WHITE)
-	_title_label("ARROWS move+jump   L punch   ↓ duck",   18, Color("#2b3a55"), Vector2(320, 574))
+	_title_label("P1: WASD + F punch + S duck", 20, Color("#e74c3c"), Vector2(-320, 550), Color.WHITE)
+	_title_label("P2: ARROWS + L punch + ↓ duck", 20, Color("#2465c8"), Vector2(320, 550), Color.WHITE)
 
 	_press_label = _title_label("PRESS ENTER TO START", 32, Color.WHITE, Vector2(0, 630), Color("#2b3a55"))
 	_title_label("All monsters drawn by Evan", 18, Color("#4a5a75"), Vector2(0, 688))
